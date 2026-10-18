@@ -1,0 +1,4 @@
+{
+ "_설명": "랭챌 분석기가 읽는 설정. discord_webhook_b64 = 매주 기록을 받을 디스코드 웹훅 주소(base64). 주소를 바꾸면 프로그램 업데이트 없이 바로 반영돼요.",
+ "discord_webhook_b64": "aHR0cHM6Ly9kaXNjb3JkLmNvbS9hcGkvd2ViaG9va3MvMTU2MTQzOTAzNjIxNDc0MzA4Mi9oMy02NHlud2FydDNMcDRubHl2aUpCdHhnTmtEdFRpTWJvNGlJaGpfSkN5SmpNX2tETUVpTXNuV2x2TTBvcDBCYTdsRQ=="
+}

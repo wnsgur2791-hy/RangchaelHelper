@@ -1,89 +1,67 @@
 # -*- coding: utf-8 -*-
-"""새 버전 릴리스 만들기
+"""새 버전 배포 (GitHub '릴리스' 기능 없이, 저장소 파일만으로)
 
-사용:  python tools/release.py 1.0.1 "바뀐 내용 한 줄" ["바뀐 내용 두 번째 줄" ...]
-       (--dry 를 붙이면 zip만 만들고 올리지 않음)
+사용:  python tools/release.py 1.0.1 "바뀐 내용 한 줄" ["두 번째 줄" ...]
 
 하는 일
-1. 랭챌분석기/app/version.py 의 VERSION 을 바꿈
-2. dist/update.zip          : 자동 업데이트용 (app 폴더 + 설명서/처음 읽어주세요/requirements)
-   dist/RangchaelHelper.zip : 처음 받는 사람용 전체 (랭챌분석기 폴더 통째, 언어 데이터 포함)
-3. GitHub 릴리스 vX.Y.Z 를 만들고 두 파일을 붙임 (gh CLI 필요)
+1. 랭챌분석기/app/version.py 의 VERSION 을 바꾸고 커밋 + push (main)
+2. 그 커밋 번호(ref)와 파일 목록(경로 -> sha256)을 latest.json 에 적고 커밋 + push
+   사용자 PC의 app/updater.py 는 켤 때 latest.json 을 읽고, 자기 파일과 다른 것만
+   raw.githubusercontent.com/<저장소>/<ref>/랭챌분석기/<경로> 에서 받아서 바꿈.
+처음 받는 사람은 저장소 첫 화면의 'Code -> Download ZIP' (또는 README 링크)로 전체를 받음.
 """
-import os, re, sys, json, zipfile, subprocess
+import os, re, sys, json, hashlib, subprocess
 
-REPO = 'wnsgur2791-hy/RangchaelHelper'
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PROG = os.path.join(HERE, '랭챌분석기')
-DIST = os.path.join(HERE, 'dist')
 SKIP_DIRS = {'__pycache__', '기록데이터', '진단', '학습대기', '클로드작업', '업데이트백업'}
-SKIP_FILES = {'랭챌기록.xlsx', '설정.json'}
-UPDATE_ROOT_FILES = ('설명서.txt', '처음 읽어주세요.txt', 'requirements.txt')
+ROOT_FILES = ('설명서.txt', '처음 읽어주세요.txt', 'requirements.txt')
+ATTR = ('\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n'
+        'Claude-Session: https://claude.ai/code/session_01RSfLpposDiHKjCGfnRBw13')
 
 
-def walk(base):
-    for root, dirs, files in os.walk(base):
-        dirs[:] = sorted(d for d in dirs if d not in SKIP_DIRS)
-        for f in sorted(files):
-            if f in SKIP_FILES or f.endswith('.pyc') or f.endswith('.tmp'):
-                continue
-            yield os.path.join(root, f)
-
-
-def set_version(v):
-    p = os.path.join(PROG, 'app', 'version.py')
-    s = open(p, encoding='utf-8').read()
-    s = re.sub(r"VERSION = '[^']*'", f"VERSION = '{v}'", s)
-    open(p, 'w', encoding='utf-8').write(s)
-
-
-def build():
-    os.makedirs(DIST, exist_ok=True)
-    up = os.path.join(DIST, 'update.zip')
-    with zipfile.ZipFile(up, 'w', zipfile.ZIP_DEFLATED) as z:
-        for f in walk(os.path.join(PROG, 'app')):
-            z.write(f, os.path.relpath(f, PROG).replace(os.sep, '/'))
-        for f in UPDATE_ROOT_FILES:
-            p = os.path.join(PROG, f)
-            if os.path.isfile(p):
-                z.write(p, f)
-    full = os.path.join(DIST, 'RangchaelHelper.zip')
-    with zipfile.ZipFile(full, 'w', zipfile.ZIP_DEFLATED) as z:
-        for f in walk(PROG):
-            z.write(f, os.path.relpath(f, HERE).replace(os.sep, '/'))
-    return up, full
-
-
-def gh(*args, input_file=None):
-    cmd = ['gh', 'api'] + list(args)
-    if input_file:
-        cmd += ['--input', input_file]
-    out = subprocess.run(cmd, capture_output=True, text=True)
+def git(*a):
+    out = subprocess.run(['git', '-C', HERE] + list(a), capture_output=True, text=True)
     if out.returncode != 0:
-        raise SystemExit(f'gh 실패: {" ".join(cmd)}\n{out.stderr or out.stdout}')
-    return json.loads(out.stdout or '{}')
+        raise SystemExit(f'git {" ".join(a)} 실패:\n{out.stderr or out.stdout}')
+    return out.stdout.strip()
 
 
-def publish(v, notes, up, full):
-    body = '\n'.join(f'- {n}' for n in notes) if notes else f'v{v}'
-    rel = gh('-X', 'POST', f'repos/{REPO}/releases', '-f', f'tag_name=v{v}', '-f', 'target_commitish=main',
-             '-f', f'name=v{v}', '-f', f'body={body}')
-    rid = rel['id']
-    for path, name in ((up, 'update.zip'), (full, 'RangchaelHelper.zip')):
-        gh('-X', 'POST', '-H', 'Content-Type: application/zip',
-           f'https://uploads.github.com/repos/{REPO}/releases/{rid}/assets?name={name}', input_file=path)
-    return rel['html_url']
+def commit_push(msg):
+    git('add', '-A')
+    if git('status', '--porcelain'):
+        git('-c', 'user.name=wnsgur2791-hy', '-c', 'user.email=wnsgur2791-hy@users.noreply.github.com',
+            'commit', '-q', '-m', msg + ATTR)
+    git('push', 'origin', 'HEAD:main')
+    return git('rev-parse', 'HEAD')
+
+
+def manifest():
+    files = {}
+    app = os.path.join(PROG, 'app')
+    for root, dirs, fs in os.walk(app):
+        dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
+        for f in fs:
+            if f.endswith('.pyc') or f.endswith('.tmp'):
+                continue
+            p = os.path.join(root, f)
+            files[os.path.relpath(p, PROG).replace(os.sep, '/')] = hashlib.sha256(open(p, 'rb').read()).hexdigest()
+    for f in ROOT_FILES:
+        p = os.path.join(PROG, f)
+        if os.path.isfile(p):
+            files[f] = hashlib.sha256(open(p, 'rb').read()).hexdigest()
+    return dict(sorted(files.items()))
 
 
 if __name__ == '__main__':
-    args = [a for a in sys.argv[1:] if a != '--dry']
-    if not args:
+    if len(sys.argv) < 2:
         raise SystemExit(__doc__)
-    v, notes = args[0].lstrip('v'), args[1:]
-    set_version(v)
-    up, full = build()
-    print(f'update.zip {os.path.getsize(up) / 1e6:.1f}MB / RangchaelHelper.zip {os.path.getsize(full) / 1e6:.1f}MB')
-    if '--dry' in sys.argv:
-        print('(--dry: 올리지 않음)')
-    else:
-        print('릴리스:', publish(v, notes, up, full))
+    v, notes = sys.argv[1].lstrip('vV'), sys.argv[2:]
+    p = os.path.join(PROG, 'app', 'version.py')
+    s = open(p, encoding='utf-8').read()
+    open(p, 'w', encoding='utf-8').write(re.sub(r"VERSION = '[^']*'", f"VERSION = '{v}'", s))
+    ref = commit_push(f'랭챌 분석기 v{v}\n\n' + '\n'.join(f'- {n}' for n in notes))
+    latest = {'version': v, 'ref': ref, 'notes': notes, 'files': manifest()}
+    json.dump(latest, open(os.path.join(HERE, 'latest.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
+    commit_push(f'latest.json -> v{v}')
+    print(f'v{v} 배포 완료 (ref {ref[:8]}, 파일 {len(latest["files"])}개)')

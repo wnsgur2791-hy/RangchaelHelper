@@ -2,18 +2,18 @@
 """자동 업데이트 (파이썬 기본 기능만 사용 - 다른 부품이 없어도 돌아가게)
 
 동작 순서 (실행.bat -> launcher.py 가 프로그램을 켜기 직전에 부름)
-1. GitHub 저장소의 '최신 릴리스'를 물어봄 (1초 정도)
-2. 내 버전보다 새 버전이면 update.zip(코드만, 1~2MB)을 받음
+1. GitHub 저장소의 latest.json(최신 버전 번호 + 파일 목록)을 읽음 (1초 정도)
+2. 내 버전보다 새 버전이면, 내 파일과 다른 파일만 골라서 받음 (보통 몇십 KB)
 3. 지금 app 폴더를 '업데이트백업' 폴더에 복사해 둔 뒤 새 파일로 바꿈
-   - 기록데이터, 랭챌기록.xlsx, 설정.json, 진단, 학습대기는 절대 건드리지 않음 (update.zip에 들어 있지도 않음)
+   - 기록데이터, 랭챌기록.xlsx, 설정.json, 진단, 학습대기는 절대 건드리지 않음 (받는 목록에 들어 있지도 않음)
    - 학습 그림(app/templates)은 덮어쓰지 않고 '없는 것만' 추가 -> 내가 학습시킨 그림은 그대로
    - 이름 고침표(name_fix.json)는 합침 -> 내가 추가한 고침은 그대로
    - .bat 파일은 실행 중에 바꾸면 윈도우가 이상하게 동작해서 바꾸지 않음
 4. 새 버전이 켜지고 3초가 지나면 '정상 실행' 표시를 남김.
    새 버전이 켜지다 죽으면, 다음에 켤 때 백업으로 되돌림 (같은 버전이 두 번 실패하면 그 버전은 건너뜀)
 """
-import os, sys, io, json, time, shutil, zipfile, datetime, subprocess
-import urllib.request
+import os, sys, io, json, time, shutil, zipfile, hashlib, datetime, subprocess
+import urllib.request, urllib.parse
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(APP_DIR)
@@ -72,12 +72,53 @@ def http_get(url, timeout=8):
 
 
 def latest_release(repo, timeout=6):
-    """{'version': '1.0.1', 'notes': '...', 'update_url': ..., 'full_url': ...} 또는 None"""
-    data = json.loads(http_get(f'https://api.github.com/repos/{repo}/releases/latest', timeout).decode('utf-8'))
-    assets = {a.get('name'): a.get('browser_download_url') for a in data.get('assets') or []}
-    return {'version': (data.get('tag_name') or '').lstrip('vV'), 'notes': data.get('body') or '',
-            'update_url': assets.get('update.zip'), 'full_url': assets.get('RangchaelHelper.zip'),
-            'page': data.get('html_url')}
+    """저장소 main 의 latest.json -> {'version', 'notes', 'ref', 'files': {경로: sha256}}"""
+    url = f'https://raw.githubusercontent.com/{repo}/main/latest.json?t={int(time.time())}'
+    data = json.loads(http_get(url, timeout).decode('utf-8'))
+    notes = data.get('notes') or ''
+    if isinstance(notes, list):
+        notes = '\n'.join(f'- {n}' for n in notes)
+    return {'version': str(data.get('version') or '').lstrip('vV'), 'notes': notes, 'ref': data.get('ref') or 'main',
+            'files': data.get('files') or {}, 'repo': repo}
+
+
+def _sha(path):
+    h = hashlib.sha256()
+    with open(path, 'rb') as f:
+        for chunk in iter(lambda: f.read(1 << 16), b''):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _wanted(rel):
+    top = rel.split('/')[0]
+    return (top == 'app' or rel in ROOT_FILES) and '__pycache__' not in rel and not rel.endswith('.pyc')
+
+
+def download_changed(rel, log=print):
+    """내 PC 파일과 다른 파일만 받아서 zip(바이트)으로 묶음 -> apply_zip 에 넘김"""
+    buf = io.BytesIO()
+    n = 0
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as z:
+        for path, sha in sorted(rel['files'].items()):
+            path = _safe_name(path)
+            if not path or not _wanted(path):
+                continue
+            local = os.path.join(ROOT_DIR, *path.split('/'))
+            if os.path.isfile(local):
+                if path.startswith('app/templates/'):
+                    continue                           # 학습 그림은 있으면 안 받음
+                if _sha(local) == sha:
+                    continue                           # 같은 파일은 안 받음
+            url = (f"https://raw.githubusercontent.com/{rel['repo']}/{rel['ref']}/"
+                   + urllib.parse.quote('랭챌분석기/' + path))
+            data = http_get(url, timeout=30)
+            if hashlib.sha256(data).hexdigest() != sha:
+                raise RuntimeError(f'{path} 파일이 제대로 받아지지 않았어요')
+            z.writestr(path, data)
+            n += 1
+    log(f'  바뀐 파일 {n}개를 받았어요.')
+    return buf.getvalue()
 
 
 def check(log=print):
@@ -131,7 +172,7 @@ def apply_zip(raw, new_ver, notes='', log=print):
     """update.zip 내용을 프로그램 폴더에 반영. 반영했으면 True"""
     zf = zipfile.ZipFile(io.BytesIO(raw))
     names = [n for n in zf.namelist() if not n.endswith('/')]
-    if zf.testzip() is not None or 'app/gui.py' not in names or 'app/version.py' not in names:
+    if zf.testzip() is not None or 'app/version.py' not in names:
         raise RuntimeError('받은 업데이트 파일이 깨져 있어요')
     cur, _ = current_version()
     os.makedirs(BACKUP_DIR, exist_ok=True)
@@ -204,12 +245,12 @@ def auto_update(log=print):
         return None
     if not rel:
         return None
-    if not rel.get('update_url'):
-        log(f'  새 버전 v{rel["version"]}이 있지만 업데이트 파일이 없어요. 지금 버전으로 켤게요.')
+    if not rel.get('files'):
+        log(f'  새 버전 v{rel["version"]}이 있지만 파일 목록이 없어요. 지금 버전으로 켤게요.')
         return None
     log(f'  새 버전 v{rel["version"]}을 받는 중...')
     try:
-        raw = http_get(rel['update_url'], timeout=60)
+        raw = download_changed(rel, log)
         apply_zip(raw, rel['version'], rel.get('notes', ''), log)
         return rel['version']
     except Exception as e:

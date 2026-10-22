@@ -1,9 +1,10 @@
 {
- "version": "1.0.1",
- "ref": "156a6df937b3910241f54cd32a5283ba372ed5cc",
+ "version": "1.0.2",
+ "ref": "40827e73760d78ad356e454d366463e339647c84",
  "notes": [
-  "연속 경기 창을 못 알아보던 문제 수정 (파란 [경기 진행] 버튼으로도 확인)",
-  "연속 경기 창이 안 뜨면 그때 화면을 진단 폴더에 저장"
+  "버전 정보 창 추가: [도움말] → [버전 정보 / 업데이트] 또는 아래 오른쪽 버전 글자 클릭",
+  "창 제목에 버전 표시, 업데이트 기록 보관",
+  "예전 실행.bat으로 켜도 뒤에서 새 버전을 받아 두고 알려 줌 ([실행.bat 새로 만들기] 버튼)"
  ],
  "files": {
   "app/auto.py": "5c86e8431abaa4a9c8b84d09f912478ef80ad2c4885f4e9e5e14609f167109d3",
@@ -17,8 +18,8 @@
   "app/flows.py": "1d3643aaf6e28bc51e64f30415d3527633fd8d964e77655217b2c7b814e9e4c7",
   "app/game.py": "5109429edaeb31df9105071be9047006096210d7be4a7e84485cb1b18c9ec967",
   "app/game_adb.py": "dc08ba585e66c4c8242f2e6a9cb7ec3472f3d6d6285e6b68e3b8b37de55bf519",
-  "app/gui.py": "a2e59be1f010be487ac912b2a5b6fe4a26e37b3df2dad4b8330b777c4c40b334",
-  "app/launcher.py": "014d7484eb5457bce41f72558530ba87f9dbb3efe17c4e6ee425f68f36dfe4af",
+  "app/gui.py": "d44b9043be48ec463fee2f033d15835253653f1f9034021d57f5c8dc15da4909",
+  "app/launcher.py": "72ae02f5e442d761065480b3155ded6e461f624ea686189a7e9b10dff0a340cf",
   "app/recognize.py": "a28b4316656ea7d05af043c53ba8efd93b3d49d3fce0fa39f64954b840372309",
   "app/regions.py": "ced0a4fe9c0b6e3f1e898519f35277ea2f87969e7f7e420a586452631ff89015",
   "app/score.py": "5b4daae52135b52832b589c24575f1314c422bf01053ae0a3d2117f8a2f55e08",
@@ -348,11 +349,11 @@
   "app/templates/ui/wm_시그.png": "147b457d4df54e09d40c10c7f6e474b3a58b0676fdec3ced703827c54e7c8e9f",
   "app/templates/ui/wm_올스타.png": "99426c4a42acdc362d5fb7b2a912360bae717619ba0f1c4c1d0d62fce039de70",
   "app/templates/ui/wm_임팩.png": "f6157259f9bddc3c07a67e2be7f122dbecb34a584987d9e56fa2c6bb2f6c4549",
-  "app/updater.py": "0b6a0fe7745be51597e3633791070fedf1eacae9124799ce435fce511a1033c3",
-  "app/version.py": "2ac7f63662975080c09f2adc4292dfd40d2afd9aa80c24530678320cf9d23e2b",
+  "app/updater.py": "9aa1fd59edd16fbf335af48a6cb13cb39316acdacc9b97690b7b3b0354d4d647",
+  "app/version.py": "520140f5c81a79fcae669777a926ff7029ceec4d0e072cae1ce7c7ed06a93323",
   "app/winmodel.py": "1bb0ecdb4a25e08bedbde33b507c5a49c329bf88d522a4ea690ce3960c99abd5",
   "requirements.txt": "38d297c3f2a5e974bcbae7fc6650ac67acdcc4bb719fe1d5f778ff1aa581bf3e",
-  "설명서.txt": "7fd603fff6a35d15c24d17b0a547aa4edd4aaf9e755e09e59ef2634ec50080fa",
+  "설명서.txt": "6a5c7cc0dba0fe576318631116591cf058f3ce5f4db33ecd2f7b963015adf1cd",
   "처음 읽어주세요.txt": "0b0bb9a7cfab640fbab8bb1e63aede6ded669f2aa0d5207e08f208f5c181e316"
  }
 }

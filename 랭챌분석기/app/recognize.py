@@ -294,10 +294,19 @@ def refresh_done(img):
     return white < 0.15 and gray > 0.35
 
 
+def refresh_free_box(img):
+    """무료 갱신 버튼 오른쪽의 회색 'n/3' 칸이 있으면 무료 갱신 (포인트/스타 버튼에는 이 칸이 없음)"""
+    a = _arr(img.crop((730, 688, 835, 726))).astype(int)
+    mx, mn = a.max(axis=2), a.min(axis=2)
+    return float(((mx - mn < 20) & (mx > 100) & (mx < 170)).mean()) > 0.4
+
+
 def refresh_kind(img):
     """로비 갱신 버튼: 'free'(무료 갱신 n/3) / 'point'(P 아이콘) / 'star'(스타 아이콘) / 'done'(금일 갱신 완료)"""
     if refresh_done(img):
         return 'done'
+    if refresh_free_box(img):
+        return 'free'
     blue, yellow = _colors(img, AUTO['refresh_icon_box'])
     if yellow > 40:
         return 'star'

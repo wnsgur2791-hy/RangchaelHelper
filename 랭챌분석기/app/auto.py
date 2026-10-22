@@ -248,26 +248,38 @@ class AutoRunner:
 
     # ---------- 갱신
     def do_refresh(self, kind, st):
-        self.log(f"  갱신: {'무료' if kind == 'free' else ('포인트' if kind == 'point' else '스타')}")
-        before = self.grab()
+        """갱신 버튼을 누른 뒤 실제로 나온 화면으로 판단:
+        - 바로 새 상대 목록이 나오면 무료 갱신
+        - 즉시 갱신 창이 뜨면 포인트/스타 (창의 결제 버튼 아이콘으로 구분)
+        (버튼 모양으로 미리 짐작한 종류가 틀려도 멈추지 않게)"""
+        name = {'free': '무료', 'point': '포인트', 'star': '스타'}
+        self.log(f"  갱신: {name.get(kind, kind)}")
         self.g.click(AUTO['refresh_btn'])
-        if kind == 'free':
-            img = self.wait_until(lambda im: R.which_screen(im) == 'lobby' and not any(r['result'] for r in R.read_lobby(im)), 10)
-            if img is None:
-                raise FlowError('무료 갱신 뒤 새 상대 목록이 나오지 않았어요.')
-        else:
-            img = self.wait_for('refresh_popup', 6)
-            if img is None:
-                raise FlowError('갱신 버튼을 눌러도 즉시 갱신 창이 안 떴어요.')
+
+        def fresh(im):
+            return R.which_screen(im) == 'lobby' and not any(r['result'] for r in R.read_lobby(im))
+        img = self.wait_until(lambda im: R.which_screen(im) == 'refresh_popup' or fresh(im), 12)
+        if img is None:
+            path = self.r.save_diag('갱신')
+            raise FlowError(f'갱신 버튼을 눌러도 새 상대 목록도, 즉시 갱신 창도 나오지 않았어요. (화면 저장: {path})')
+        if R.which_screen(img) == 'refresh_popup':
+            img = self.r.settle(img)
             pk = R.refresh_popup_kind(img)
             if pk == 'star' and not self.allowed('star', st):
                 self.g.click(AUTO['refresh_close'])                       # 창 닫기 (X)
                 raise FlowError('즉시 갱신 창에 스타가 표시돼서 누르지 않고 멈췄어요.')
+            if kind == 'free':
+                self.log(f'  (무료 갱신인 줄 알았는데 {name[pk]} 갱신 창이 떴어요)')
             self.g.click(AUTO['refresh_pay'])
-            img = self.wait_until(lambda im: R.which_screen(im) == 'lobby' and not any(r['result'] for r in R.read_lobby(im)), 12)
+            img = self.wait_until(fresh, 12)
             if img is None:
-                raise FlowError('갱신 뒤 새 상대 목록이 나오지 않았어요.')
+                path = self.r.save_diag('갱신후')
+                raise FlowError(f'갱신 뒤 새 상대 목록이 나오지 않았어요. (화면 저장: {path})')
             kind = pk
+        else:
+            if kind != 'free':
+                self.log(f'  (창 없이 바로 갱신돼서 무료 갱신으로 기록해요)')
+            kind = 'free'
         key = {'free': 'free_used', 'point': 'points_used', 'star': 'stars_used'}[kind]
         st[key] = st.get(key, 0) + 1
         self._save_state(st)

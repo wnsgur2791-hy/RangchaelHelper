@@ -20,6 +20,7 @@ ROOT_DIR = os.path.dirname(APP_DIR)
 BACKUP_DIR = os.path.join(ROOT_DIR, '업데이트백업')
 MARKER = os.path.join(BACKUP_DIR, '확인대기.json')
 SKIP = os.path.join(BACKUP_DIR, '건너뛸버전.json')
+HISTORY = os.path.join(BACKUP_DIR, '업데이트기록.json')
 ROOT_FILES = ('설명서.txt', '처음 읽어주세요.txt', 'requirements.txt')     # 루트에서 바꿔도 되는 파일
 UA = 'RangchaelHelper-updater'
 
@@ -210,6 +211,10 @@ def apply_zip(raw, new_ver, notes='', log=print):
     _clear_pycache()
     _save(MARKER, {'from': cur, 'to': new_ver, 'backup': backup, 'notes': notes,
                    'time': datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
+    hist = _load(HISTORY, []) or []
+    hist.append({'time': datetime.datetime.now().strftime('%Y-%m-%d %H:%M'), 'from': cur, 'to': new_ver,
+                 'files': n_new, 'notes': notes})
+    _save(HISTORY, hist[-30:])
     log(f'  v{cur} → v{new_ver} 업데이트 완료 (파일 {n_new}개, 새 학습 그림 {n_tpl}개). 이전 버전은 업데이트백업 폴더에 있어요.')
     if _read_text(os.path.join(ROOT_DIR, 'requirements.txt')) != old_req:
         log('  필요한 부품이 바뀌어서 설치할게요... (1~3분)')
@@ -304,3 +309,18 @@ def rollback_if_needed(log=print):
     except OSError:
         pass
     return True
+
+
+def history():
+    """[{'time', 'from', 'to', 'files', 'notes'}] 최근 것이 뒤"""
+    return _load(HISTORY, []) or []
+
+
+def update_now(log=print):
+    """(프로그램이 켜진 상태에서) 새 버전이 있으면 받아서 바꿈. 바꾼 버전 번호 또는 None. 적용은 다시 켤 때"""
+    rel = check(log)
+    if not rel or not rel.get('files'):
+        return None
+    raw = download_changed(rel, log)
+    apply_zip(raw, rel['version'], rel.get('notes', ''), log)
+    return rel['version']

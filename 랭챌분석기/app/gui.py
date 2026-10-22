@@ -123,6 +123,7 @@ class App:
         except Exception:
             VERSION = '?'
         self.version = VERSION
+        root.title(f'랭챌 분석기 v{VERSION}')
         import share_data
         self.share_on = tk.BooleanVar(value=share_data.state().get('consent') is True)
 
@@ -166,8 +167,6 @@ class App:
         t = tk.Menu(m, tearoff=0)
         t.add_command(label='진단용 캡처 (지금 게임 화면 저장)', command=self.do_diag)
         t.add_command(label='진단 폴더 열기', command=lambda: self._open_dir(os.path.join(ST.ROOT_DIR, '진단')))
-        t.add_separator()
-        t.add_command(label='업데이트 확인', command=self.check_update)
         m.add_cascade(label='도구', menu=t)
         s = tk.Menu(m, tearoff=0)
         s.add_checkbutton(label='클로드 코드 연동', variable=self.claude_on, command=self.toggle_claude)
@@ -175,6 +174,10 @@ class App:
         s.add_checkbutton(label='창을 항상 위에', variable=self.ontop,
                           command=lambda: self.root.attributes('-topmost', self.ontop.get()))
         m.add_cascade(label='설정', menu=s)
+        h = tk.Menu(m, tearoff=0)
+        h.add_command(label='버전 정보 / 업데이트', command=self.show_version)
+        h.add_command(label='설명서 열기', command=lambda: self._open(os.path.join(ST.ROOT_DIR, '설명서.txt')))
+        m.add_cascade(label='도움말', menu=h)
         self.root.configure(menu=m)
 
     def _build_sidebar(self, parent):
@@ -274,7 +277,9 @@ class App:
         ttk.Label(bar, textvariable=self.status, style='StatusBold.TLabel').pack(side='left')
         self.prog.pack(side='left', padx=10)
         self.prog.pack_forget()
-        ttk.Label(bar, text=f'v{self.version}', style='Status.TLabel').pack(side='right', padx=(14, 0))
+        vl = ttk.Label(bar, text=f'v{self.version}  ⓘ', style='Status.TLabel', cursor='hand2')
+        vl.pack(side='right', padx=(14, 0))
+        vl.bind('<Button-1>', lambda e: self.show_version())          # 아래 버전 글자를 누르면 버전 창
         for v in (self.learn_txt, self.claude_txt, self.conn_txt):
             ttk.Label(bar, textvariable=v, style='Status.TLabel').pack(side='right', padx=(14, 0))
 
@@ -323,6 +328,8 @@ class App:
                     self.log('  ' + line)
         except Exception as e:
             self.log(f'(업데이트 확인 표시 실패: {e})')
+        if os.environ.get('RANGCHAL_LAUNCHER') != '1':
+            self.auto_update_late()
         import share_data
         if share_data.state().get('consent') is None:
             ok = messagebox.askyesno(
@@ -355,20 +362,121 @@ class App:
         if not once:
             self.root.after(6 * 3600 * 1000, self.share_loop)
 
-    def check_update(self):
+    def auto_update_late(self):
+        """예전 실행.bat(gui.py를 바로 켜는 것)으로 켠 경우: 켜진 뒤 뒤에서 업데이트를 받아 둠 -> 다시 켜면 적용"""
         def work():
             import updater
             try:
-                rel = updater.check(self.log)
+                if not updater.enabled():
+                    return
+                v = updater.update_now(self.log)
             except Exception as e:
-                self.log(f'업데이트 확인 실패: {e}', 'bad')
+                self.log(f'(업데이트 확인 실패: {e.__class__.__name__})')
                 return
-            if rel:
-                self.log(f"새 버전 v{rel['version']}이 있어요. 프로그램을 껐다 켜면 자동으로 바뀌어요.", 'good')
-            else:
-                self.log(f'지금 버전 v{self.version}이 최신이에요.')
-        self.nb.select(self._log_tab)
+            if v:
+                self.log(f'새 버전 v{v}을 받아 두었어요. 프로그램을 껐다 켜면 바뀌어요. ([도움말] → [버전 정보]에서 바로 다시 켤 수 있어요)', 'good')
+                self.log('  ※ 지금 실행.bat 이 예전 것이라 켤 때 자동 업데이트가 안 돼요. [도움말] → [버전 정보]의 안내를 봐 주세요.', 'bad')
         threading.Thread(target=work, daemon=True).start()
+
+    def show_version(self):
+        """버전 정보 창: 지금 버전, 최신 버전, 업데이트 기록, [지금 업데이트], [다시 켜기]"""
+        import updater
+        w = tk.Toplevel(self.root)
+        w.title('버전 정보')
+        w.minsize(560, 0)
+        w.transient(self.root)
+        box = ttk.Frame(w, padding=18)
+        box.pack(fill='both', expand=True)
+        ttk.Label(box, text='랭챌 분석기', font=(UI_FAMILY, 15, 'bold')).pack(anchor='w')
+        latest = tk.StringVar(w, value='최신 버전   확인 중...')
+        w._keep = latest                          # 창이 열려 있는 동안 글자 변수가 사라지지 않게
+        ttk.Label(box, text=f'지금 버전   v{self.version}', font=(UI_FAMILY, 11, 'bold')).pack(anchor='w', pady=(10, 0))
+        lat_lbl = ttk.Label(box, textvariable=latest, font=(UI_FAMILY, 11))
+        lat_lbl.pack(anchor='w')
+        via = os.environ.get('RANGCHAL_LAUNCHER') == '1'
+        ok_auto = updater.enabled()
+        how = ('켤 때마다 자동으로 확인하고 바꿔요' if via else
+               '⚠ 지금 실행.bat 이 예전 것이라 켤 때 자동 업데이트가 안 돼요.\n'
+               '   새 실행.bat 으로 바꾸려면 아래 [실행.bat 새로 만들기]를 누르세요.')
+        if not ok_auto:
+            how = '자동 업데이트가 꺼져 있어요 (설정.json 의 "자동_업데이트": false)'
+        ttk.Label(box, text='자동 업데이트: ' + how, foreground=C['good'] if (via and ok_auto) else C['bad'],
+                  justify='left').pack(anchor='w', pady=(6, 10))
+        ttk.Label(box, text='업데이트 기록', font=(UI_FAMILY, 10, 'bold')).pack(anchor='w')
+        t = tk.Text(box, height=9, wrap='word', relief='flat', bg=C['card'], highlightthickness=0, padx=8, pady=6,
+                    font=FONT)
+        t.pack(fill='both', expand=True, pady=(4, 10))
+        hist = updater.history()
+        if hist:
+            for h in reversed(hist):
+                t.insert('end', f"{h.get('time')}   v{h.get('from')} → v{h.get('to')}\n")
+                for line in (h.get('notes') or '').strip().splitlines():
+                    t.insert('end', f'    {line}\n')
+        else:
+            t.insert('end', '아직 기록이 없어요. (이번 버전부터 업데이트할 때마다 여기에 쌓여요)\n')
+        t.configure(state='disabled')
+        bf = ttk.Frame(box)
+        bf.pack(fill='x')
+        state = {'rel': None}
+        upd = ttk.Button(bf, text='지금 업데이트', style='Primary.TButton')
+        upd.pack(side='left')
+        upd.state(['disabled'])
+
+        def restart():
+            """새 실행 방식(launcher)으로 다시 켜고 지금 창은 닫음"""
+            try:
+                flags = getattr(subprocess, 'CREATE_NEW_CONSOLE', 0)        # 새 검은 창에서 업데이트 메시지가 보이게
+                subprocess.Popen([sys.executable, os.path.join(ST.APP_DIR, 'launcher.py')], cwd=ST.ROOT_DIR,
+                                 creationflags=flags)
+            except Exception as e:
+                messagebox.showerror('다시 켜기', f'다시 켜지 못했어요: {e}', parent=w)
+                return
+            self.root.destroy()
+
+        def do_update():
+            upd.state(['disabled'])
+            latest.set('최신 버전   받는 중...')
+
+            def work():
+                try:
+                    v = updater.update_now(self.log)
+                except Exception as e:
+                    self.ui(lambda: latest.set(f'최신 버전   업데이트 실패: {e}'))
+                    return
+                if v:
+                    self.ui(lambda: (latest.set(f'최신 버전   v{v} 받기 완료 → 다시 켜면 적용돼요'),
+                                     upd.configure(text='다시 켜기', command=restart), upd.state(['!disabled'])))
+            threading.Thread(target=work, daemon=True).start()
+
+        upd.configure(command=do_update)
+        if not via:
+            def make_bat():
+                p = os.path.join(ST.ROOT_DIR, '실행_새버전.bat')
+                txt = ('@echo off\nchcp 65001 >' + 'nul\ncd /d "%~dp0"\nwhere py >' + 'nul 2>' + 'nul\nif errorlevel 1 (\n'
+                       '  python app\\launcher.py\n) else (\n  py -3 app\\launcher.py\n)\nif errorlevel 1 pause\n')
+                with open(p, 'w', encoding='utf-8', newline='\r\n') as f:
+                    f.write(txt)
+                messagebox.showinfo('실행.bat 새로 만들기',
+                                    '프로그램 폴더에 "실행_새버전.bat"을 만들었어요.\n\n'
+                                    '프로그램을 끈 뒤, 예전 "실행.bat"을 지우고 "실행_새버전.bat"의 이름을 "실행.bat"으로 바꿔 주세요.\n'
+                                    '(프로그램이 켜져 있는 동안에는 실행.bat을 바로 바꿀 수 없어서 따로 만들었어요)', parent=w)
+                self._open(ST.ROOT_DIR)
+            ttk.Button(bf, text='실행.bat 새로 만들기', command=make_bat).pack(side='left', padx=8)
+        ttk.Button(bf, text='닫기', command=w.destroy).pack(side='right')
+
+        def check():
+            try:
+                rel = updater.check(lambda *a, **k: None)
+                if rel:
+                    state['rel'] = rel
+                    msg = f"최신 버전   v{rel['version']}  ← 새 버전이 있어요"
+                    self.ui(lambda: (latest.set(msg), upd.state(['!disabled'])))
+                else:
+                    self.ui(lambda: latest.set(f'최신 버전   v{self.version}  (지금이 최신이에요)'))
+            except Exception as e:
+                err = e.__class__.__name__
+                self.ui(lambda: latest.set(f'최신 버전   확인 실패 ({err}) — 인터넷 연결을 확인해 주세요'))
+        threading.Thread(target=check, daemon=True).start()
 
     def _open_dir(self, d):
         os.makedirs(d, exist_ok=True)

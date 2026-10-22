@@ -14,6 +14,7 @@ def say(msg):
 
 
 def main():
+    os.environ['RANGCHAL_LAUNCHER'] = '1'                  # 실행.bat(자동 업데이트)으로 켰다는 표시
     import updater
     try:
         updater.rollback_if_needed(say)            # 지난번 새 버전이 켜지다 죽었으면 되돌림

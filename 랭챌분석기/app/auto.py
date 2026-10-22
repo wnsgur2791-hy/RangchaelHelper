@@ -209,7 +209,8 @@ class AutoRunner:
     def play_series(self):
         img = self.r.click_until(AUTO['cont_btn'], lambda im: R.which_screen(im) == 'cont_popup')
         if img is None:
-            raise FlowError('[연속 경기]를 눌러도 경기 목록 창이 안 떴어요.')
+            path = self.r.save_diag('연속경기창')
+            raise FlowError(f'[연속 경기]를 눌러도 경기 목록 창이 안 떴어요. (화면 저장: {path})')
         img = self.r.click_until(AUTO['cont_go'], lambda im: R.which_screen(im) != 'cont_popup', tries=3)
         if img is None:
             raise FlowError('[경기 진행]이 눌리지 않았어요.')

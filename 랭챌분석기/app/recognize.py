@@ -323,12 +323,24 @@ def is_detail(img):
                ui_score(img, 'ui_detail_arrow', DETAIL_ARROW_BOX, pad=8))
 
 
+CONT_GO_BOX = (200, 1395, 720, 1445)            # 연속 경기 창 맨 아래 파란 [경기 진행] 버튼
+
+
+def cont_go_blue(img):
+    a = _arr(img.crop(CONT_GO_BOX)).astype(int)
+    r, g, b = a[..., 0], a[..., 1], a[..., 2]
+    return float(((b > 180) & (r < 60) & (g > 40) & (g < 140)).mean())
+
+
 def which_screen(img, thr=0.7):
     best = (None, 0.0)
     for k, (name, box) in SCREENS.items():
         s = ui_score(img, name, box)
         if k == 'detail':
             s = max(s, is_detail(img) - 0.05)          # 특이폼 버튼이 없어도 X·« 가 둘 다 보이면 상세 화면
+        if k == 'cont_popup' and s >= 0.45 and cont_go_blue(img) > 0.6:
+            # 글자 비교 점수가 조금 낮게 나와도(화면 배율·흐림 차이) 파란 [경기 진행] 버튼이 있으면 연속 경기 창
+            s = max(s, 0.8)
         if s > best[1]:
             best = (k, s)
     return best[0] if best[1] >= thr else None
